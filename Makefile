@@ -13,7 +13,7 @@ clean:
 	@echo "[OK] clean ok!"
 
 run: check clean
-	@go run . "https://github.com/spf13/cobra-cli"
+	@LOG_LEVEL=debug go run . "https://github.com/spf13/cobra-cli"
 
 sec:
 	@gosec --color=false ./...

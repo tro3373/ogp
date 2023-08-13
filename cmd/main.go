@@ -12,15 +12,22 @@ import (
 
 	"github.com/dyatlov/go-opengraph/opengraph"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const DEBUG = false
 const MULTI = 2
 
 func main(args []string) {
-	err := handleArgs(args)
+	// initConfigInner
+	level, err := log.ParseLevel(os.Getenv("LOG_LEVEL"))
+	if err == nil {
+		log.SetLevel(level)
+	}
+	log.Debug("Debug start")
+	err = handleArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		log.Error(err)
 		os.Exit(1)
 	}
 	debug("Done")
@@ -90,7 +97,16 @@ func handleArgs(args []string) error {
 		cancel() // ctxを終了させる
 	}()
 
-	return handleResult(&wg, urls, resultQueue)
+	ogs, errors := collectResults(&wg, urls, resultQueue)
+
+	debug("wg.Waiting..")
+	wg.Wait() //  すべてのgoroutineが終了するのを待つ
+	debug("wg.Wait done..")
+
+	if len(errors) > 0 {
+		return errors[0]
+	}
+	return printResult(ogs)
 }
 
 func getUrlsFromStdinOrArgs(args []string) []string {
@@ -115,10 +131,6 @@ func handleTask(task *Task) {
 	defer func() {
 		debug("==> [Worker] Defer!", task)
 		task.wg.Done()
-		// debug("==> [worker] closing queue!", task)
-		// close(task.queue)
-		// debug("==> [worker] closing result queue!", task)
-		// close(task.resultQueue)
 	}()
 	for {
 		select {
@@ -129,31 +141,12 @@ func handleTask(task *Task) {
 			//  URL取得処理
 			debug("==> [Worker] Receive url!", url, task)
 			og, err := handleUrl(url)
-			// debug("==> [Worker] Sleeping", url, task)
-			// time.Sleep(5 * time.Second)
-			// debug("==> [Worker] Sleeping Done", url, task)
 			task.resultQueue <- NewTaskResult(url, og, err)
-			// debug("==> [Worker] Complete url!", url, task)
 		}
 	}
 }
 
-func handleUrl(url string) (*opengraph.OpenGraph, error) {
-	var reader io.Reader
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, errors.Wrapf(err, "Failed to handle url:%s", url)
-	}
-	reader = resp.Body
-	defer resp.Body.Close()
-	og := opengraph.NewOpenGraph()
-	if err := og.ProcessHTML(reader); err != nil {
-		return nil, errors.Wrapf(err, "Failed to ProcessHTML url:%s", url)
-	}
-	return og, nil
-}
-
-func handleResult(wg *sync.WaitGroup, urls []string, resultQueue chan *TaskResult) error {
+func collectResults(wg *sync.WaitGroup, urls []string, resultQueue chan *TaskResult) ([]*opengraph.OpenGraph, []error) {
 	ogs := []*opengraph.OpenGraph{}
 	errors := []error{}
 	count := 0
@@ -172,18 +165,22 @@ func handleResult(wg *sync.WaitGroup, urls []string, resultQueue chan *TaskResul
 			close(resultQueue)
 		}
 	}
-	if len(errors) > 0 {
-		return errors[0]
-	}
-	err := printResult(ogs)
-	if err != nil {
-		return err
-	}
-	debug("wg.Waiting..")
-	wg.Wait() //  すべてのgoroutineが終了するのを待つ
-	debug("wg.Wait done..")
+	return ogs, errors
+}
 
-	return nil
+func handleUrl(url string) (*opengraph.OpenGraph, error) {
+	var reader io.Reader
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Failed to handle url:%s", url)
+	}
+	reader = resp.Body
+	defer resp.Body.Close()
+	og := opengraph.NewOpenGraph()
+	if err := og.ProcessHTML(reader); err != nil {
+		return nil, errors.Wrapf(err, "Failed to ProcessHTML url:%s", url)
+	}
+	return og, nil
 }
 
 func printResult(ogs []*opengraph.OpenGraph) error {
@@ -203,5 +200,5 @@ func debug(a ...any) {
 	if !DEBUG {
 		return
 	}
-	fmt.Fprintln(os.Stderr, a...)
+	log.Debugf("%+v", a...)
 }
