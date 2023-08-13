@@ -43,6 +43,9 @@ tidy:
 tidy-go:
 	@ver=$(shell go version|awk '{print $$3}' |sed -e 's,go\(.*\)\..*,\1,g') && go mod tidy -go=$${ver}
 
+test:
+	@go test -v ./...
+
 gr_init:
 	@goreleaser init
 gr_check:
