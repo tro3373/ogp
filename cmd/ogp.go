@@ -169,12 +169,16 @@ func collectResults(wg *sync.WaitGroup, urls []string, resultQueue chan *TaskRes
 func handleUrl(url string) (*opengraph.OpenGraph, error) {
 	var reader io.Reader
 	// [http.Get に URI を変数のまま入れると叱られる](https://zenn.dev/spiegel/articles/20210125-http-get)
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) //#nosec
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed to handle url:%s", url)
 	}
 	reader = resp.Body
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Error("Failed to close response body for url", url, err)
+		}
+	}()
 	og := opengraph.NewOpenGraph()
 	if err := og.ProcessHTML(reader); err != nil {
 		return nil, errors.Wrapf(err, "Failed to ProcessHTML url:%s", url)
