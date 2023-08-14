@@ -18,7 +18,7 @@ import (
 const DEBUG = false
 const MULTI = 2
 
-func main(args []string) {
+func ogpArgs(args []string) {
 	// initConfigInner
 	level, err := log.ParseLevel(os.Getenv("LOG_LEVEL"))
 	if err == nil {
@@ -120,9 +120,7 @@ func getUrlsFromStdinOrArgs(args []string) []string {
 			urls = append(urls, scanner.Text())
 		}
 	}
-	for _, arg := range args {
-		urls = append(urls, arg)
-	}
+	urls = append(urls, args...)
 	return urls
 }
 
@@ -170,6 +168,7 @@ func collectResults(wg *sync.WaitGroup, urls []string, resultQueue chan *TaskRes
 
 func handleUrl(url string) (*opengraph.OpenGraph, error) {
 	var reader io.Reader
+	// [http.Get に URI を変数のまま入れると叱られる](https://zenn.dev/spiegel/articles/20210125-http-get)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed to handle url:%s", url)
