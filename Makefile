@@ -13,7 +13,10 @@ clean:
 	@echo "[OK] clean ok!"
 
 run: check clean
-	@LOG_LEVEL=debug go run . "https://github.com/spf13/cobra-cli"
+	@cat<./test/urls.txt | LOG_LEVEL=debug go run .
+
+test:
+	@go test -v ./...
 
 sec:
 	@gosec --color=false ./...
@@ -42,9 +45,6 @@ tidy:
 
 tidy-go:
 	@ver=$(shell go version|awk '{print $$3}' |sed -e 's,go\(.*\)\..*,\1,g') && go mod tidy -go=$${ver}
-
-test:
-	@go test -v ./...
 
 gr_init:
 	@goreleaser init
