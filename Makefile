@@ -4,6 +4,12 @@ name := $(shell grep module ./go.mod|head -1|sed -e 's,^.*/,,g')
 .DEFAULT_GOAL := run
 
 depends_cmds := go gosec goreleaser #statik
+
+tag:
+	@v=$$(git tag --list |sort -V |tail -1) && nv="$${v%.*}.$$(($${v##*.}+1))" && echo "==> New tag: $${nv}" && git tag $${nv}
+tagp: tag
+	@git push --tags
+
 check:
 	@for cmd in ${depends_cmds}; do command -v $$cmd >&/dev/null || (echo "No $$cmd command" && exit 1); done
 	@echo "[OK] check ok!"
