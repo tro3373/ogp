@@ -77,7 +77,7 @@ func (tr *TaskResult) String() string {
 func handleArgs(args []string) error {
 	urls := getUrlsFromStdinOrArgs(args)
 	if len(urls) == 0 {
-		return fmt.Errorf("No url provided")
+		return fmt.Errorf("no url provided")
 	}
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -97,7 +97,7 @@ func handleArgs(args []string) error {
 		cancel() // ctxを終了させる
 	}()
 
-	ogs, errors := collectResults(&wg, urls, resultQueue)
+	ogs, errors := collectResults(urls, resultQueue)
 
 	debug("wg.Waiting..")
 	wg.Wait() //  すべてのgoroutineが終了するのを待つ
@@ -138,13 +138,13 @@ func handleTask(task *Task) {
 		case url := <-task.queue:
 			//  URL取得処理
 			debug("==> [Worker] Receive url!", url, task)
-			og, err := handleUrl(url)
+			og, err := handleURL(url)
 			task.resultQueue <- NewTaskResult(url, og, err)
 		}
 	}
 }
 
-func collectResults(wg *sync.WaitGroup, urls []string, resultQueue chan *TaskResult) ([]*opengraph.OpenGraph, []error) {
+func collectResults(urls []string, resultQueue chan *TaskResult) ([]*opengraph.OpenGraph, []error) {
 	ogs := []*opengraph.OpenGraph{}
 	errors := []error{}
 	count := 0
@@ -166,7 +166,7 @@ func collectResults(wg *sync.WaitGroup, urls []string, resultQueue chan *TaskRes
 	return ogs, errors
 }
 
-func handleUrl(url string) (*opengraph.OpenGraph, error) {
+func handleURL(url string) (*opengraph.OpenGraph, error) {
 	var reader io.Reader
 	// [http.Get に URI を変数のまま入れると叱られる](https://zenn.dev/spiegel/articles/20210125-http-get)
 	resp, err := http.Get(url) //#nosec

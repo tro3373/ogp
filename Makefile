@@ -21,6 +21,7 @@ clean:
 run: check clean
 	@cat<./test/urls.txt | LOG_LEVEL=debug go run .
 
+.PHONY: test
 test:
 	@go test -v ./...
 

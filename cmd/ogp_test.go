@@ -4,7 +4,7 @@ import "testing"
 
 func TestHandleUrl(t *testing.T) {
 	url := "https://example.com/"
-	ogp, err := handleUrl(url)
+	ogp, err := handleURL(url)
 	if err != nil {
 		t.Errorf("handleUrl(%s) returned error: %s", url, err)
 		return
