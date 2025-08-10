@@ -3,7 +3,7 @@ name := $(shell grep module ./go.mod|head -1|sed -e 's,^.*/,,g')
 
 .DEFAULT_GOAL := run
 
-depends_cmds := go gosec goreleaser #statik
+depends_cmds := go gosec #goreleaser statik
 
 tag:
 	@v=$$(git tag --list |sort -V |tail -1) && nv="$${v%.*}.$$(($${v##*.}+1))" && echo "==> New tag: $${nv}" && git tag $${nv}
@@ -19,7 +19,7 @@ clean:
 	@echo "[OK] clean ok!"
 
 run: check clean
-	@cat<./test/urls.txt | LOG_LEVEL=debug go run .
+	@cat<./test/urls.txt | LOG_LEVEL=debug go run . --config example.ogp
 
 .PHONY: test
 test:

@@ -1,0 +1,8 @@
+# Example configuration file for ogp
+# Place this file at ~/.ogp to enable XClient for Twitter/X.com
+
+# Path to cookie JSON file exported from browser
+# This enables authenticated access to Twitter/X.com
+# Export cookies using browser extensions like "EditThisCookie" or "Cookie Editor"
+x_cookie_json: ./cookies.json
+
