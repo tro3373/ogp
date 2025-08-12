@@ -19,7 +19,7 @@ clean:
 	@echo "[OK] clean ok!"
 
 run: check clean
-	@cat<./test/urls.txt | LOG_LEVEL=debug go run . --config example.ogp
+	@cat<./test/urls.txt | grep -v '^#' | LOG_LEVEL=debug X_COOKIE_JSON=./cookies.json go run .
 
 .PHONY: test
 test:
