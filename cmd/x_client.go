@@ -19,14 +19,19 @@ type XClient struct {
 func NewXClient() (client *XClient, err error) {
 	scraper := twscraper.New()
 
-	cookieJSONPath := viper.GetString("x_cookie_json")
+	// 1. 環境変数でファイルパス
+	cookieJSONPath := os.Getenv("X_COOKIE_JSON")
+	if cookieJSONPath == "" {
+		// 2. 設定ファイルでファイルパス
+		cookieJSONPath = viper.GetString("x_cookie_json")
+	}
+
 	if cookieJSONPath != "" {
 		if err := setupCookieAuth(scraper, cookieJSONPath); err != nil {
 			return nil, err
 		}
-	}
-
-	if cookieJSONPath == "" {
+	} else {
+		// 3. 環境変数のauth/csrfトークン
 		if err := setupEnvAuth(scraper); err != nil {
 			return nil, err
 		}
@@ -138,7 +143,7 @@ func setupEnvAuth(scraper *twscraper.Scraper) error {
 	csrfToken := os.Getenv("X_CSRF_TOKEN")
 
 	if authToken == "" || csrfToken == "" {
-		return fmt.Errorf("no authentication method configured. Please set either:\n1. x_cookie_json config to the path of cookies.json exported from your browser, or\n2. X_AUTH_TOKEN and X_CSRF_TOKEN environment variables")
+		return fmt.Errorf("no authentication method configured. Please set either:\n1. X_COOKIE_JSON environment variable to the path of cookies.json exported from your browser,\n2. x_cookie_json config to the path of cookies.json exported from your browser, or\n3. X_AUTH_TOKEN and X_CSRF_TOKEN environment variables")
 	}
 
 	log.Infof("==> Using auth tokens from environment variables")
