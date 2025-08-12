@@ -1,33 +1,48 @@
-export SHELL := /bin/bash
-name := $(shell grep module ./go.mod|head -1|sed -e 's,^.*/,,g')
+SHELL := bash
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+mkfile_dir := $(patsubst %/,%,$(dir $(mkfile_path)))
+PATH := $(mkfile_dir)/bin:$(PATH)
+.SHELLFLAGS := -eu -o pipefail -c # -c: Needed in .SHELLFLAGS. Default is -c.
+.DEFAULT_GOAL := build
 
-.DEFAULT_GOAL := run
+# dotenv := $(PWD)/.env
+# -include $(dotenv)
 
-depends_cmds := go gosec #goreleaser statik
+# app := app
+# stage := dev
 
-tag:
-	@v=$$(git tag --list |sort -V |tail -1) && nv="$${v%.*}.$$(($${v##*.}+1))" && echo "==> New tag: $${nv}" && git tag $${nv}
-tagp: tag
-	@git push --tags
+export
 
+dst := /tmp/api
+
+depends_cmds := go golangci-lint #goreleaser statik
 check:
 	@for cmd in ${depends_cmds}; do command -v $$cmd >&/dev/null || (echo "No $$cmd command" && exit 1); done
 	@echo "[OK] check ok!"
 
+all: clean tidy fmt lint build test
 clean:
-	@for d in $(name); do if [[ -e $${d} ]]; then echo "==> Removing $${d}.." && rm -rf $${d}; fi done
-	@echo "[OK] clean ok!"
-
-run: check clean
-	@cat<./test/urls.txt | grep -v '^#' | LOG_LEVEL=debug X_COOKIE_JSON=./cookies.json go run .
-
-.PHONY: test
-test:
-	@go test -v ./...
-
-sec:
-	@gosec --color=false ./...
-	@echo "[OK] Go security check was completed!"
+	@echo "==> Cleaning" >&2
+	@rm -f $(dst)
+	@go clean -cache -testcache
+deps:
+	@go list -m all
+update:
+	@go get -u ./...
+tidy:
+	@echo "==> Running go mod tidy -v"
+	@go mod tidy -v
+tidy-go:
+	@v=$(shell go version|awk '{print $$3}' |sed -e 's,go\(.*\)\..*,\1,g') && go mod tidy -go=$${v}
+fmt:
+	@echo "==> Running go fmt ./..." >&2
+	@go fmt ./...
+lint:
+	@echo "==> Running golangci-lint run" >&2
+	@golangci-lint run
+# build:
+# 	@echo "==> Go Building" >&2
+# 	@env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o $(dst) cmd/main.go
 
 build: build-linux
 build-linux:
@@ -38,20 +53,52 @@ build-windows:
 	@make GOOS=windows GOARCH=amd64 _build
 build-android:
 	@make GOOS=android GOARCH=arm64 _build
-_build: check clean sec
-	@env GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w"
+_build: clean tidy fmt lint
+	@env CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w" -v -o $(dst) ./main.go
 
-deps:
-	@go list -m all
+run: check clean
+	@cat<./test/urls.txt | grep -v '^#' | LOG_LEVEL=debug X_COOKIE_JSON=./cookies.json go run .
 
-update:
-	@go get -u ./...
+pkg := ./...
+cover_mode := atomic
+cover_out := cover.out
+.PHONY: test
+test: testsum-cover-check
+# test-normal:
+# 	@echo "==> Testing $(pkg)" >&2
+# 	@go test -v $(pkg)
+# test-cover:
+# 	@echo "==> Running go test with coverage check" >&2
+# 	@go test $(pkg) -coverprofile=$(cover_out) -covermode=$(cover_mode) -coverpkg=$(pkg)
+# test-cover-count:
+# 	@echo "==> Running go test with coverage check (count mode)" >&2
+# 	@make test-cover cover_mode=count
+# 	@go tool cover -func=$(cover_out)
+# test-cover-html: test-cover
+# 	@go tool cover -html=$(cover_out) -o cover.html
+# test-cover-open: test-cover
+# 	@go tool cover -html=$(cover_out)
+# test-cover-check: test-cover-html
+# 	@echo "==> Checking coverage threshold" >&2
+# 	@go-test-coverage --config=./.testcoverage.yml
+testsum:
+	@echo "==> Running go testsum" >&2
+	@gotestsum --format testname -- -v $(pkg) -coverprofile=$(cover_out) -covermode=$(cover_mode) -coverpkg=$(pkg)
+testsum-cover-check: testsum
+	@echo "==> Running test-coverage" >&2
+	@go-test-coverage --config=./.testcoverage.yaml
 
-tidy:
-	@go mod tidy
 
-tidy-go:
-	@ver=$(shell go version|awk '{print $$3}' |sed -e 's,go\(.*\)\..*,\1,g') && go mod tidy -go=$${ver}
+# gen: mockery
+# mockery:
+# 	@echo "==> Running mockery" >&2
+# 	@mockery
+
+tag:
+	@v=$$(git tag --list |sort -V |tail -1) && nv="$${v%.*}.$$(($${v##*.}+1))" && echo "==> New tag: $${nv}" && git tag $${nv}
+tagp: tag
+	@git push --tags
+
 
 gr_init:
 	@goreleaser init
