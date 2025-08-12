@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -18,68 +17,23 @@ type XClient struct {
 }
 
 func NewXClient() (client *XClient, err error) {
-	cookieJSONPath := viper.GetString("x_cookie_json")
-	if cookieJSONPath == "" {
-		return nil, fmt.Errorf("x_cookie_json config is not set, please set it to the path of cookies.json exported from your browser")
-	}
-
-	log.Infof("==> Using cookies.json from config: %s", cookieJSONPath)
 	scraper := twscraper.New()
 
-	// Deserialize from JSON
-	var cookiesJSON []CookieJSON
-	f, err := os.Open(cookieJSONPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open config file %s: %w", cookieJSONPath, err)
-	}
-
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("failed to close cookies.json: %w", cerr)
-		}
-	}()
-
-	err = json.NewDecoder(f).Decode(&cookiesJSON)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode cookies: %w", err)
-	}
-
-	// Convert to http.Cookie
-	var cookies []*http.Cookie
-	var authToken, csrfToken string
-	for _, c := range cookiesJSON {
-		httpCookie := c.ToHTTPCookie()
-		cookies = append(cookies, httpCookie)
-		// Log important cookies for debugging
-		if c.Name == "auth_token" {
-			authToken = c.Value
-			slog.Info("Found auth_token", "value", c.Value[:10]+"...")
-		}
-		if c.Name == "ct0" {
-			csrfToken = c.Value
-			slog.Info("Found ct0 (CSRF token)", "value", c.Value[:10]+"...")
+	cookieJSONPath := viper.GetString("x_cookie_json")
+	if cookieJSONPath != "" {
+		if err := setupCookieAuth(scraper, cookieJSONPath); err != nil {
+			return nil, err
 		}
 	}
 
-	slog.Info("Total cookies", "count", len(cookies))
-	slog.Info("Auth info", "hasAuthToken", authToken != "", "hasCSRFToken", csrfToken != "")
-
-	// Use SetAuthToken method if we have both tokens
-	if authToken != "" && csrfToken != "" {
-		slog.Info("Using SetAuthToken method")
-		scraper.SetAuthToken(twscraper.AuthToken{
-			Token:     authToken,
-			CSRFToken: csrfToken,
-		})
-	} else {
-		slog.Info("Using SetCookies method")
-		scraper.SetCookies(cookies)
+	if cookieJSONPath == "" {
+		if err := setupEnvAuth(scraper); err != nil {
+			return nil, err
+		}
 	}
 
-	// After setting Cookies or AuthToken you have to execute IsLoggedIn method.
-	// Without it, scraper wouldn't be able to make requests that requires authentication
 	if !scraper.IsLoggedIn() {
-		return nil, fmt.Errorf("invalid cookies: failed to authenticate with X/Twitter")
+		return nil, fmt.Errorf("invalid credentials: failed to authenticate with X/Twitter")
 	}
 
 	return &XClient{
@@ -105,9 +59,15 @@ type CookieJSON struct {
 
 // ToHTTPCookie converts CookieJSON to http.Cookie
 func (c *CookieJSON) ToHTTPCookie() *http.Cookie {
+	// Remove surrounding quotes from value if present
+	value := c.Value
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		value = value[1 : len(value)-1]
+	}
+
 	cookie := &http.Cookie{
 		Name:     c.Name,
-		Value:    c.Value,
+		Value:    value,
 		Path:     c.Path,
 		Domain:   c.Domain,
 		Secure:   c.Secure,
@@ -127,4 +87,65 @@ func (c *CookieJSON) ToHTTPCookie() *http.Cookie {
 	}
 
 	return cookie
+}
+
+func setupCookieAuth(scraper *twscraper.Scraper, cookieJSONPath string) (err error) {
+	log.Infof("==> Using cookies.json from config: %s", cookieJSONPath)
+
+	var cookiesJSON []CookieJSON
+	f, err := os.Open(cookieJSONPath)
+	if err != nil {
+		return fmt.Errorf("failed to open config file %s: %w", cookieJSONPath, err)
+	}
+
+	defer func() {
+		cerr := f.Close()
+		if cerr == nil {
+			return
+		}
+		if err == nil {
+			err = fmt.Errorf("failed to close cookies.json: %w", cerr)
+			return
+		}
+		err = fmt.Errorf("%v; additionally failed to close cookies.json: %w", err, cerr)
+	}()
+
+	err = json.NewDecoder(f).Decode(&cookiesJSON)
+	if err != nil {
+		return fmt.Errorf("failed to decode cookies: %w", err)
+	}
+
+	var cookies []*http.Cookie
+	for _, c := range cookiesJSON {
+		httpCookie := c.ToHTTPCookie()
+		cookies = append(cookies, httpCookie)
+	}
+
+	for _, cookie := range cookies {
+		switch cookie.Domain {
+		case ".x.com":
+			cookie.Domain = ".twitter.com"
+		case "x.com":
+			cookie.Domain = "twitter.com"
+		}
+	}
+	scraper.SetCookies(cookies)
+	return nil
+}
+
+func setupEnvAuth(scraper *twscraper.Scraper) error {
+	authToken := os.Getenv("X_AUTH_TOKEN")
+	csrfToken := os.Getenv("X_CSRF_TOKEN")
+
+	if authToken == "" || csrfToken == "" {
+		return fmt.Errorf("no authentication method configured. Please set either:\n1. x_cookie_json config to the path of cookies.json exported from your browser, or\n2. X_AUTH_TOKEN and X_CSRF_TOKEN environment variables")
+	}
+
+	log.Infof("==> Using auth tokens from environment variables")
+
+	scraper.SetAuthToken(twscraper.AuthToken{
+		Token:     authToken,
+		CSRFToken: csrfToken,
+	})
+	return nil
 }
