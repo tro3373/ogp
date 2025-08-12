@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	twscraper "github.com/imperatrona/twitter-scraper"
@@ -98,7 +99,10 @@ func setupCookieAuth(scraper *twscraper.Scraper, cookieJSONPath string) (err err
 	log.Infof("==> Using cookies.json from config: %s", cookieJSONPath)
 
 	var cookiesJSON []CookieJSON
-	f, err := os.Open(cookieJSONPath)
+	if filepath.IsAbs(cookieJSONPath) || strings.Contains(cookieJSONPath, "..") {
+		return fmt.Errorf("invalid cookie JSON path: %s. Please provide an absolute path or a valid relative path without '..'", cookieJSONPath)
+	}
+	f, err := os.Open(filepath.Clean(cookieJSONPath))
 	if err != nil {
 		return fmt.Errorf("failed to open config file %s: %w", cookieJSONPath, err)
 	}
