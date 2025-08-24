@@ -9,6 +9,7 @@ import (
 
 	"github.com/dyatlov/go-opengraph/opengraph"
 	"github.com/dyatlov/go-opengraph/opengraph/types/image"
+	twitterscraper "github.com/imperatrona/twitter-scraper"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
@@ -135,35 +136,52 @@ func handleTwitterWithXClient(url string) *TaskResult {
 	og.Type = "article"
 	og.SiteName = "X (formerly Twitter)"
 
-	// Add images if present
-	if len(tweet.Photos) > 0 {
-		for _, photo := range tweet.Photos {
-			og.Images = append(og.Images, &image.Image{
-				URL: photo.URL,
-			})
-		}
-	}
-
-	// Add video preview if present
-	if len(tweet.Videos) > 0 && tweet.Videos[0].Preview != "" {
+	imageURL := getImageURL(tweet)
+	if imageURL != "" {
 		og.Images = append(og.Images, &image.Image{
-			URL: tweet.Videos[0].Preview,
+			URL: imageURL,
 		})
-	}
-
-	image := ""
-	if len(og.Images) > 0 {
-		image = og.Images[0].URL
 	}
 
 	return &TaskResult{
 		URL:         url,
 		Title:       og.Title,
 		Description: og.Description,
-		Image:       image,
+		Image:       imageURL,
 		Og:          og,
 		Err:         nil,
 	}
+}
+
+func getImageURL(tweet *twitterscraper.Tweet) string {
+	// Add images if present
+	if len(tweet.Photos) > 0 {
+		for _, photo := range tweet.Photos {
+			return photo.URL
+		}
+	}
+
+	// Add video preview if present
+	if len(tweet.Videos) > 0 && tweet.Videos[0].Preview != "" {
+		return tweet.Videos[0].Preview
+	}
+
+	tweetContent := tweet.Text
+	url := getFirstURL(tweetContent)
+	if url == "" {
+		return ""
+	}
+	result := handleGeneralURL(url)
+	return result.Image
+}
+
+func getFirstURL(text string) string {
+	re := regexp.MustCompile(`https?://[^\s]+`)
+	matches := re.FindStringSubmatch(text)
+	if len(matches) > 0 {
+		return matches[0]
+	}
+	return ""
 }
 
 func extractTweetID(url string) string {
