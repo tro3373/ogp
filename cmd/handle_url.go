@@ -166,13 +166,28 @@ func getImageURL(tweet *twitterscraper.Tweet) string {
 		return tweet.Videos[0].Preview
 	}
 
+	// Fallback: Try to extract image from the linked URL in tweet content
 	tweetContent := tweet.Text
 	url := getFirstURL(tweetContent)
-	if url == "" {
+	if url != "" {
+		result := handleGeneralURL(url)
+		if result.Image != "" {
+			return result.Image
+		}
+	}
+
+	// Fallback: Use account avatar if no media or linked images found
+	if tweet.Username == "" {
 		return ""
 	}
-	result := handleGeneralURL(url)
-	return result.Image
+
+	profile, err := xClient.Scraper.GetProfile(tweet.Username)
+	if err != nil {
+		log.Errorf("Failed to get profile for %s: %v", tweet.Username, err)
+		return ""
+	}
+
+	return profile.Avatar
 }
 
 func getFirstURL(text string) string {
