@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -34,17 +35,20 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "ogp",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "Extract OpenGraph metadata from URLs",
+	Long: `ogp is a CLI tool that extracts OpenGraph (OGP) metadata from URLs.
+It supports single URL from command line arguments or multiple URLs from stdin.
+Twitter/X URLs are handled using the oEmbed API (no authentication required).
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
+Usage:
+  ogp <url>                    Extract OGP from a single URL
+  cat urls.txt | ogp           Extract OGP from multiple URLs via stdin
+  echo "https://example.com" | ogp`,
 	Run: func(cmd *cobra.Command, args []string) {
-		handle(args)
+		if err := handle(args); err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
 	},
 }
 

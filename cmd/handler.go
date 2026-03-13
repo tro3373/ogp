@@ -2,39 +2,28 @@ package cmd
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/tro3373/ogp/external/shared"
+	"github.com/tro3373/ogp/pkg/ogp"
 )
 
-const DEBUG = false
-const MULTI = 2
+const workers = 2
 
-var xClient *XClient
-
-func handle(args []string) {
-	// initConfigInner
+func handle(args []string) error {
 	level, err := log.ParseLevel(os.Getenv("LOG_LEVEL"))
 	if err == nil {
 		log.SetLevel(level)
 	}
 	log.Debug("Debug start")
 
-	xClient, err = NewXClient()
-	if err != nil {
-		log.Warnf("Failed to initialize XClient: %v", err)
-	}
-
-	err = handleArgs(args)
-	if err != nil {
-		log.Error(err)
-		os.Exit(1)
-	}
-	debug("Done")
+	return handleArgs(args)
 }
 
 func handleArgs(args []string) error {
@@ -42,31 +31,15 @@ func handleArgs(args []string) error {
 	if len(urls) == 0 {
 		return fmt.Errorf("no url provided")
 	}
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.Background())
-	queue := make(chan string)
-	resultQueue := make(chan *TaskResult)
 
-	for i := range MULTI {
-		task := NewTask(i, ctx, &wg, queue, resultQueue)
-		go handleTask(task)
-	}
-	go func() {
-		for _, url := range urls {
-			debug("=> [Input] Queing url:", url)
-			queue <- url
-		}
-		debug("=> [Input] Cancel!")
-		cancel() // ctxを終了させる
-	}()
+	apiClient := shared.NewAPIClient(
+		shared.WithDumpEnabled(log.GetLevel() >= log.DebugLevel),
+	)
+	fetcher := ogp.NewFetcher(&apiClientAdapter{client: apiClient})
+	results := fetchAll(fetcher, urls)
 
-	taskResults := collectResults(urls, resultQueue)
-
-	debug("wg.Waiting..")
-	wg.Wait() //  すべてのgoroutineが終了するのを待つ
-	debug("wg.Wait done..")
-
-	return printResult(taskResults)
+	log.Debug("Done")
+	return printResult(results)
 }
 
 func getUrlsFromStdinOrArgs(args []string) []string {
@@ -74,81 +47,83 @@ func getUrlsFromStdinOrArgs(args []string) []string {
 
 	fi, _ := os.Stdin.Stat()
 	if (fi.Mode() & os.ModeCharDevice) == 0 {
-		// pipe
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			urls = append(urls, scanner.Text())
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			urls = append(urls, line)
 		}
 	}
-	urls = append(urls, args...)
+	for _, arg := range args {
+		trimmed := strings.TrimSpace(arg)
+		if trimmed == "" {
+			continue
+		}
+		urls = append(urls, trimmed)
+	}
 	return urls
 }
 
-func handleTask(task *Task) {
-	debug("==> [Worker] Start", task)
-	defer func() {
-		debug("==> [Worker] Defer!", task)
-		task.Wg.Done()
-	}()
-	for {
-		select {
-		case <-task.Ctx.Done():
-			debug("==> [Worker] Receive ctxDone!", task)
-			return
-		case url := <-task.Queue:
-			//  URL取得処理
-			debug("==> [Worker] Receive url!", url, task)
-			tr := handleURL(url)
-			task.ResultQueue <- tr
-		}
+func fetchAll(fetcher *ogp.Fetcher, urls []string) []*ogp.Result {
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		results []*ogp.Result
+	)
+
+	sem := make(chan struct{}, workers)
+
+	for _, u := range urls {
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			log.Debugf("Fetching URL: %s", url)
+			result := fetcher.Fetch(url)
+			if result.Err != nil {
+				log.Warnf("Error fetching %s: %v", url, result.Err)
+			}
+
+			mu.Lock()
+			results = append(results, result)
+			mu.Unlock()
+		}(u)
 	}
+
+	wg.Wait()
+	return results
 }
 
-func collectResults(urls []string, resultQueue chan *TaskResult) []*TaskResult {
-	taskResults := []*TaskResult{}
-	count := 0
-	for tr := range resultQueue {
-		count++
-		debug("=> [Result] Receive tr:", tr)
-		taskResults = append(taskResults, tr)
-		if tr.Err != nil {
-			debug("=> [Result] Error exist tr:", tr)
-		}
-		if count == len(urls) {
-			debug("=> [Result] Closing resultQueue")
-			close(resultQueue)
-		}
-	}
-	return taskResults
+type apiClientAdapter struct {
+	client *shared.APIClient
 }
 
-func printResult(taskResults []*TaskResult) error {
-	// エラーのないTaskResultを抽出
-	results := make([]*TaskResult, 0, len(taskResults))
-	for _, result := range taskResults {
-		if result.Err != nil {
+func (a *apiClientAdapter) Request(req *http.Request) ([]byte, int, error) {
+	return a.client.Request(req)
+}
+
+func printResult(results []*ogp.Result) error {
+	successful := make([]*ogp.Result, 0, len(results))
+	for _, r := range results {
+		if r.Err != nil {
 			continue
 		}
-		results = append(results, result)
+		successful = append(successful, r)
 	}
 
-	// 1件しかない場合は配列ではなく、Objectで出力する
-	var target any = results
-	if len(results) == 1 {
-		target = results[0]
+	var target any = successful
+	if len(successful) == 1 {
+		target = successful[0]
 	}
 
 	output, err := json.MarshalIndent(target, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal result: %w", err)
 	}
 	fmt.Println(string(output))
 	return nil
-}
-
-func debug(a ...any) {
-	if !DEBUG {
-		return
-	}
-	log.Debugf("%+v", a...)
 }
