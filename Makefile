@@ -96,7 +96,7 @@ testsum-cover-check: testsum
 
 tag:
 	@v=$$(git tag --list |sort -V |tail -1) && nv="$${v%.*}.$$(($${v##*.}+1))" && echo "==> New tag: $${nv}" && git tag $${nv}
-tagp: tag
+tagp:
 	@git push --tags
 
 
