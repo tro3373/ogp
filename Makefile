@@ -57,7 +57,7 @@ _build: clean tidy fmt lint
 	@env CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w" -v -o $(dst) ./main.go
 
 run: check clean
-	@cat<./test/urls.txt | grep -v '^#' | LOG_LEVEL=debug X_COOKIE_JSON=./cookies.json go run .
+	@cat<./test/urls.txt | grep -v '^#' | LOG_LEVEL=debug go run .
 
 pkg := ./...
 cover_mode := atomic
