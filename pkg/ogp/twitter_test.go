@@ -4,125 +4,74 @@ import (
 	"testing"
 )
 
-func TestIsTwitterURL(t *testing.T) {
+func TestParseTweetID(t *testing.T) {
 	tests := map[string]struct {
 		url  string
-		want bool
-	}{
-		"twitter.com URL": {
-			url:  "https://twitter.com/user/status/123",
-			want: true,
-		},
-		"x.com URL": {
-			url:  "https://x.com/user/status/456",
-			want: true,
-		},
-		"general URL": {
-			url:  "https://example.com",
-			want: false,
-		},
-		"github URL": {
-			url:  "https://github.com/user/repo",
-			want: false,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := IsTwitterURL(tc.url)
-			if got != tc.want {
-				t.Errorf("IsTwitterURL(%q) = %v, want %v", tc.url, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestExtractTextFromOEmbedHTML(t *testing.T) {
-	tests := map[string]struct {
-		html string
 		want string
 	}{
-		"standard tweet HTML": {
-			html: `<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Hello world!</p>— User (@user) <a href="https://twitter.com/user/status/123">March 1, 2024</a></blockquote>`,
-			want: "Hello world!",
+		"投稿 URL の場合_ID を返すこと": {
+			url:  "https://x.com/jack/status/20",
+			want: "20",
 		},
-		"tweet with link": {
-			html: `<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Check this: <a href="https://t.co/abc">https://t.co/abc</a></p></blockquote>`,
-			want: "Check this: https://t.co/abc",
+		"statuses 形式の場合_ID を返すこと": {
+			url:  "https://twitter.com/jack/statuses/20",
+			want: "20",
 		},
-		"empty HTML": {
-			html: "",
+		"i/web 形式の場合_ID を返すこと": {
+			url:  "https://x.com/i/web/status/20",
+			want: "20",
+		},
+		"クエリ付きの場合_ID を返すこと": {
+			url:  "https://x.com/jack/status/20?s=46&t=abc",
+			want: "20",
+		},
+		"写真ページの場合_ID を返すこと": {
+			url:  "https://x.com/jack/status/20/photo/1",
+			want: "20",
+		},
+		"プロフィール URL の場合_空を返すこと": {
+			url:  "https://x.com/jack",
+			want: "",
+		},
+		"ID が数字でない場合_空を返すこと": {
+			url:  "https://x.com/jack/status/abc",
+			want: "",
+		},
+		"ID の末尾に数字以外が続く場合_空を返すこと": {
+			url:  "https://x.com/jack/status/123abc",
+			want: "",
+		},
+		"ID にアンダースコアが混ざる場合_空を返すこと": {
+			url:  "https://x.com/jack/status/12_3",
+			want: "",
+		},
+		"twitter.com の場合_ID を返すこと": {
+			url:  "https://twitter.com/jack/status/20",
+			want: "20",
+		},
+		"mobile.x.com の場合_ID を返すこと": {
+			url:  "https://mobile.x.com/jack/status/20",
+			want: "20",
+		},
+		"ホストが大文字の場合_ID を返すこと": {
+			url:  "https://X.com/jack/status/20",
+			want: "20",
+		},
+		"X 以外のホストの場合_空を返すこと": {
+			url:  "https://example.com/jack/status/20",
+			want: "",
+		},
+		"github URL の場合_空を返すこと": {
+			url:  "https://github.com/user/repo",
 			want: "",
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := extractTextFromOEmbedHTML(tc.html)
+			got := parseTweetID(tc.url)
 			if got != tc.want {
-				t.Errorf("extractTextFromOEmbedHTML() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestIsTcoOnly(t *testing.T) {
-	tests := map[string]struct {
-		text string
-		want bool
-	}{
-		"t.co URL only": {
-			text: "https://t.co/abc123",
-			want: true,
-		},
-		"t.co with whitespace": {
-			text: "  https://t.co/abc123  ",
-			want: true,
-		},
-		"text with t.co": {
-			text: "Check this https://t.co/abc123",
-			want: false,
-		},
-		"no URL": {
-			text: "Hello world",
-			want: false,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := isTcoOnly(tc.text)
-			if got != tc.want {
-				t.Errorf("isTcoOnly(%q) = %v, want %v", tc.text, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestExtractURLs(t *testing.T) {
-	tests := map[string]struct {
-		text string
-		want int
-	}{
-		"single URL": {
-			text: "Check https://example.com here",
-			want: 1,
-		},
-		"multiple URLs": {
-			text: "Visit https://a.com and http://b.com",
-			want: 2,
-		},
-		"no URLs": {
-			text: "No links here",
-			want: 0,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := extractURLs(tc.text)
-			if len(got) != tc.want {
-				t.Errorf("extractURLs(%q) returned %d URLs, want %d", tc.text, len(got), tc.want)
+				t.Errorf("parseTweetID(%q) = %q, want %q", tc.url, got, tc.want)
 			}
 		})
 	}

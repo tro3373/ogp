@@ -16,18 +16,24 @@ type HTTPClient interface {
 
 // Fetcher fetches OGP metadata from URLs.
 type Fetcher struct {
-	client HTTPClient
+	client           HTTPClient
+	fxTwitterAPIBase string
 }
 
 // NewFetcher creates a new Fetcher with the given HTTP client.
-func NewFetcher(client HTTPClient) *Fetcher {
-	return &Fetcher{client: client}
+// An empty fxTwitterAPIBase, or one that is not an absolute http(s) URL,
+// falls back to the public FixTweet instance.
+func NewFetcher(client HTTPClient, fxTwitterAPIBase string) *Fetcher {
+	return &Fetcher{
+		client:           client,
+		fxTwitterAPIBase: resolveFxTwitterAPIBase(fxTwitterAPIBase),
+	}
 }
 
 // Fetch fetches OGP metadata from a URL.
 func (f *Fetcher) Fetch(targetURL string) *Result {
-	if IsTwitterURL(targetURL) {
-		return f.fetchTwitter(targetURL)
+	if tweetID := parseTweetID(targetURL); tweetID != "" {
+		return f.fetchTwitter(targetURL, tweetID)
 	}
 	return f.fetchGeneral(targetURL)
 }

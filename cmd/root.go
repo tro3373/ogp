@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
 	Short: "Extract OpenGraph metadata from URLs",
 	Long: `ogp is a CLI tool that extracts OpenGraph (OGP) metadata from URLs.
 It supports single URL from command line arguments or multiple URLs from stdin.
-Twitter/X URLs are handled using the oEmbed API (no authentication required).
+Twitter/X post URLs are handled using the FixTweet API (no authentication required).
 
 Usage:
   ogp <url>                    Extract OGP from a single URL

@@ -10,11 +10,17 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"github.com/tro3373/ogp/external/shared"
 	"github.com/tro3373/ogp/pkg/ogp"
 )
 
-const workers = 2
+const (
+	workers = 2
+	// fxTwitterAPIBaseKey reads OGP_FXTWITTER_API from the environment via
+	// viper.AutomaticEnv, or ogp_fxtwitter_api from ~/.ogp.
+	fxTwitterAPIBaseKey = "ogp_fxtwitter_api"
+)
 
 func handle(args []string) error {
 	level, err := log.ParseLevel(os.Getenv("LOG_LEVEL"))
@@ -35,7 +41,10 @@ func handleArgs(args []string) error {
 	apiClient := shared.NewAPIClient(
 		shared.WithDumpEnabled(log.GetLevel() >= log.DebugLevel),
 	)
-	fetcher := ogp.NewFetcher(&apiClientAdapter{client: apiClient})
+	fetcher := ogp.NewFetcher(
+		&apiClientAdapter{client: apiClient},
+		viper.GetString(fxTwitterAPIBaseKey),
+	)
 	results := fetchAll(fetcher, urls)
 
 	log.Debug("Done")

@@ -2,49 +2,27 @@
 
 ## Configuration
 
-### X/Twitter Authentication
+### X/Twitter
 
-For X/Twitter URLs, authentication is required. There are two methods:
+X/Twitter post URLs are resolved via the [FixTweet](https://github.com/FixTweet/FxTwitter)
+API. No authentication is required.
 
-#### Method 1: Using cookies.json (Recommended)
+- Post text comes back with `t.co` links already expanded.
+- Link previews (title / description / image) come from the API response.
+- If the API is unreachable, the URL falls back to normal OGP extraction.
 
-1. Export cookies from your browser as JSON:
-   - Chrome: Use extension like "Cookie-Editor" or "Export Cookies"
-   - Firefox: Use "Cookie Quick Manager" extension
-   - Export cookies for `x.com` domain
-
-2. Configure the path to your cookies.json file (in order of priority):
-   ```bash
-   # Option 1: Environment variable (highest priority)
-   export X_COOKIE_JSON="/path/to/your/cookies.json"
-
-   # Option 2: Create config file at ~/.ogp
-   echo 'x_cookie_json: "/path/to/your/cookies.json"' > ~/.ogp
-   ```
-
-3. Expected cookies.json format:
-   ```json
-   [
-     {
-       "name": "auth_token",
-       "value": "your_auth_token_value",
-       "domain": ".x.com",
-       "path": "/",
-       "secure": true,
-       "httpOnly": true,
-       "sameSite": "None"
-     }
-   ]
-   ```
-
-#### Method 2: Using Environment Variables
+To use a self-hosted FixTweet instance, set the API base URL either way:
 
 ```bash
-export X_AUTH_TOKEN="your_auth_token"
-export X_CSRF_TOKEN="your_csrf_token"
+# Environment variable
+export OGP_FXTWITTER_API="https://fxtwitter.example.com"
+
+# Config file at ~/.ogp
+echo 'ogp_fxtwitter_api: "https://fxtwitter.example.com"' > ~/.ogp
 ```
 
-Note: If no authentication is configured, the application will display an error message with all available configuration options including the X_COOKIE_JSON environment variable.
+A value that is not an absolute `http(s)` URL is ignored with a warning, and
+the public instance is used instead.
 
 ## Example usage:
 
