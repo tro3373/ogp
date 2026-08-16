@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -33,7 +34,10 @@ func handle(args []string) error {
 }
 
 func handleArgs(args []string) error {
-	urls := getUrlsFromStdinOrArgs(args)
+	urls, err := getUrlsFromStdinOrArgs(args)
+	if err != nil {
+		return err
+	}
 	if len(urls) == 0 {
 		return fmt.Errorf("no url provided")
 	}
@@ -51,19 +55,16 @@ func handleArgs(args []string) error {
 	return printResult(results)
 }
 
-func getUrlsFromStdinOrArgs(args []string) []string {
+func getUrlsFromStdinOrArgs(args []string) ([]string, error) {
 	var urls []string
 
 	fi, _ := os.Stdin.Stat()
 	if (fi.Mode() & os.ModeCharDevice) == 0 {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" {
-				continue
-			}
-			urls = append(urls, line)
+		stdinUrls, err := readUrls(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read urls from stdin: %w", err)
 		}
+		urls = stdinUrls
 	}
 	for _, arg := range args {
 		trimmed := strings.TrimSpace(arg)
@@ -72,7 +73,26 @@ func getUrlsFromStdinOrArgs(args []string) []string {
 		}
 		urls = append(urls, trimmed)
 	}
-	return urls
+	return urls, nil
+}
+
+// readUrls reads one URL per line, skipping blank lines. A read failure or a
+// line longer than bufio's buffer must not pass as an empty URL list.
+func readUrls(r io.Reader) ([]string, error) {
+	var urls []string
+
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		urls = append(urls, line)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return urls, nil
 }
 
 func fetchAll(fetcher *ogp.Fetcher, urls []string) []*ogp.Result {
